@@ -1,490 +1,171 @@
-# CI/CD for 309 Android/Spring projects 
+# Expedia-Clone
+
+A React + Redux travel booking web application supporting flight and hotel search, filtering, cart, booking, and an administrative panel. Phone-based (OTP) authentication is handled by Firebase; application data is served by a local `json-server` mock API.
+
+This repository is maintained for **SE 3290 – Software Project Management (Fall 2026), Class Project A**. It is based on the open-source [kumkumdutta/Expedia-clone](https://github.com/kumkumdutta/Expedia-clone) project, originally built as "Chalo Ghume" by Kumkum Dutta, Ashish, Amit, Sagar Balsaraf, and Sarim. Our work covers redeployment, configuration, defect analysis, and documentation.
 
 ---
-# Setup Once As A Team:
 
-### 0. One of the team members SSH into your server
-
-From your computer, type
-```bash
-ssh <netid>@coms-3090-<xyz>.class.las.iastate.edu
-```
-
-for example ```> ssh smitra@coms-3090-001.class.las.iastate.edu```
-
-
-### 1. Install GitLab-Runner on your server
-
-Source - https://docs.gitlab.com/runner/install/linux-manually.html
-
-##### Step 1: Simply download one of the binaries for your system
-```bash
-sudo wget -O /usr/local/bin/gitlab-runner https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64
-```
-
-##### Step 2:  Give it permissions to execute
-```bash
-sudo chmod +x /usr/local/bin/gitlab-runner
-```
-
-##### Step 3: Create a GitLab CI user
-```bash
-sudo useradd --comment 'GitLab Runner' --create-home gitlab-runner --shell /bin/bash
-```
-
-##### Step 4: Provide sudo access to “GitLab Runner”
-```bash
-sudo usermod -aG proj gitlab-runner
-```
-
-##### Step 5: Install and run as service (one command at the time)
-
-```bash
-sudo /usr/local/bin/gitlab-runner install --user=gitlab-runner --working-directory=/home/gitlab-runner
-sudo /usr/local/bin/gitlab-runner start
-```
-
-Sometimes the gitlab runners are not started. You can try doing
-```bash
-sudo /usr/local/bin/gitlab-runner run
-```
-
-### 2. Install Docker on your server
-
-Source - https://docs.docker.com/engine/install/centos/
-
-##### Step 1: Switch yourself to the root user
-```bash
-sudo bash
-```
-
-##### Step 2: Uninstall the pre-installed Podman on your server
-```bash
-yum erase podman buildah
-```
-
-##### Step 3: Install Docker (one command at the time)
-
-```bash
-sudo yum install -y yum-utils
-sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-sudo yum install docker-ce docker-ce-cli containerd.io docker-compose-plugin
-```
-
-##### Step 4: Start Docker service and test if it’s working (one command at the time)
-```bash
-sudo systemctl start docker
-sudo docker run hello-world
-```
-
-##### Step 5: Set ulimit for Docker (in case of ‘unable to allocate file descriptor table - out of memory’)
-```bash
-sudo systemctl edit docker
-```
-Add following lines (use `ctrl+x` then `y` then `enter` to save and exit the nano editor)
-```
-[Service]
-ExecStart=
-ExecStart=/usr/bin/dockerd --default-ulimit nofile=65536:65536 -H fd://
-```
-
-Note: add the content starting at line#3, in between the comments (**NOT to the end of the file**).
-
-##### Step 6: Restart Docker service
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart docker
-```
-
-
-### 3. Install Maven on your server
-
-##### Step 1: Switch yourself to the root user
-```bash
-sudo bash
-```
-
-##### Step 2: Install Maven on your server
-```bash
-mvn -v
-```
-- If it’s not installed, follow the instructions (hit `y`) to install maven on your server
-- Default Java version used by Maven: 11
-- To change the Java version for your Maven:
-  - check available jvms on your server: ```ls /usr/lib/jvm```
-  - open maven configuration: ```nano /etc/java/maven.conf```
-  - replace the value of `JAVA_HOME` to one of the desired JDKs
-`ctrl+x` -> `y` -> `enter` to save & quit nano
-  - for example: `JAVA_HOME=/usr/lib/jvm/java-17-openjdk`
-
-
-### 4. Register GitLab Runner
-
-Create 2 GitLab runners as a team – Frontend & Backend.
-
-
-
-##### Step 1: Registration Token
-- In your team's repository GitLab webpage, navigate to `Settings -> CI/CD -> Runners -> Expand`
-- ~~Click on the `3 dots` next to the button `New Project Runner`~~ Registration Token has been deprecated instead click on `New project runner`
-- ~~Copy the `registration token`~~ Input tags as defined in instruction below (eg android_tag, springboot_tag, etc)
-- Click `create runner`
-- You will be taken to a new screen. Follow the instructions here. Copy the command from step 1 in this screen.
-
-
-
-##### Step 2: On your server, create a runner for Frontend (Android)
-~~sudo /usr/local/bin/gitlab-runner register~~
-
-```bash
-sudo /usr/local/bin/<replace_with_the_command_from_earlier>
-```
-
-It should be something similar to ``sudo /usr/local/bin/gitlab-runner register --url https://git.las.iastate.edu --token glrt-.........``
-
-- You will be prompted to add a gitlab-ci instance url , enter `https://git.las.iastate.edu/`
-
-- Next you will be prompted to enter the registration token you saved from step.1
-
-- Next enter any description
-
-- Next enter tags, tags are important, as they will be used later to Tie a JOB to a RUNNER, name them appropriately, so it will be easier for you to identify, example:
-  -  tag for frontend: `android_tag`
-
-- Finally, you will be asked to select executor, enter 
-  - `docker` since this runner will be used for Android
-  
-- Default Docker image enter `alpine:latest`
-  
-- Your runner should now be up and running. You can verify this by again navigating to `Settings -> CI/CD -> Runners -> Expand`, you should see an active runner created (green for active), with the specified tags.
-- Sometimes the gitlab runners are not started. You can try   `$ sudo /usr/local/bin/gitlab-runner run`
-
-##### Step 3: Fix config.toml file
-```bash
-sudo bash
-cd /etc/gitlab-runner
-```
-
-Open `config.toml`
-```bash
-nano config.toml
-```
- 
-Under `[runners.docker]` append the line (`ctrl+x`+`y`+`enter` to save & quit nano)
-```
-network_mode = "host"
-```
-
-Restart gitlab runner
-```bash
-sudo systemctl restart gitlab-runner.service
-```
-
-##### Step 4: On your server, create a runner for Backend (Springboot)
-
-##### Make sure that Backend uses JDK 11 - 17!
-
-~~sudo /usr/local/bin/gitlab-runner register~~
-Same as the isntructions above for froentend and backend
-```bash
-sudo /usr/local/bin/<replace_with_the_command_from_earlier>
-```
-
-It should be something similar to ``sudo /usr/local/bin/gitlab-runner register --url https://git.las.iastate.edu --token glrt-.........``
-
-- You will be prompted to add a gitlab-ci instance url, enter `https://git.las.iastate.edu/`
-
-- Next you will be prompted to enter the registration token you saved from step.1
-
-- Next enter any description
-
-- Next enter tags, tags are important, as they will be used later to Tie a JOB to a RUNNER, name them appropriately, so it will be easier for you to identify, example:
-  -  tag for backend: `springboot_tag`
-
-- Finally, you will be asked to select executor, enter 
-  - `shell` since this runner will be used for Springboot
-    
-- Your runner should now be up and running. You can verify this by again navigating to `Settings -> CI/CD -> Runners -> Expand`, you should see an active runner created (green for active), with the specified tags.
-- Sometimes the gitlab runners are not started. You can try   `$ sudo /usr/local/bin/gitlab-runner run`
-
-
-### 5. Create a Linux service to handle deployment (CD)
-
-##### Step 1: creates a folder named 'target' in your root directory
-```bash
-sudo mkdir /target
-```
-
-##### Step 2: makes the folder writable to all
-```bash
-sudo chmod 777 /target
-```
-
-##### Step 3: create a service file
-```bash
-cd /usr/lib/systemd/system
-sudo nano system-web-demo.service
-```
-
-##### Step 4: add following lines to the file (`ctrl+x`->`y`->`enter` to save & quit nano)
-```
-[Unit]
-Description=web demo service
-After=network.target
- 
-[Service]
-ExecStart=/usr/bin/java -jar /target/web-demo.jar   
-User=gitlab-runner
-Group=proj
- 
-[Install]
-WantedBy=multi-user.target
-```
-
-##### Step 5: Enable the service
-```bash
-sudo systemctl enable system-web-demo.service
-```
-
-### 6. Add .gitlab-ci.yml to your Main branch
-
- ##### Step 1: 
- At the top level of your `main` branch (the level where you have the frontend/backend folders), create a new file `.gitlab-ci.yml` (includes the dot)
-  - you can do this either by creating the file on your local repository and push it to your main branch
-  - or simply use the web interface of Gitlab to create a new file
-  
-##### Step 2:
-Edit the `.gitlab-ci.yml` file in your `main branch`. example content:
-
-```yaml
-stages:             # these stages (jobs) forms the CICD pipeline
-  - mavenbuild      # this is a JOB to build your Springboot application
-  - maventest       # this is a JOB to run tests in your Springboot application (it's okay you don't have any test for now)
-  - mavendeploy     # this is a JOB to deploy your Springboot application on your server
-  - androidbuild    # this is a JOB to build your Android application
-  - androidtest     # this is a JOB to run tests in your Android application (it's okay you don't have any test for now)
-
-maven-build:            
-  stage: mavenbuild     # one of the stages listed above
-  tags:                 # to specify which runner to execute this job
-    - springboot_tag    # change to your runner's tag
-  script:               # what to execute for this job
-    - cd Backend        # change 'Backend' to to where you have the pom.xml (do not add / in the beginning)
-    - mvn package       # maven package
-  artifacts:            # where to output the packaged jar file, change 'Backend' to to where you have the pom.xml
-    paths:
-    - Backend/target/*.jar # change 'Backend' to where you have 'target' (do not add a / in the beginning)
-  only:
-    refs:
-      - main            # only to trigger the pipeline when changes are pushed to 'main'
-    changes:
-      - Backend/**/*    # more specifically - only when changes are made inside the 'Backend' folder
-
-maven-test:             
-  stage: maventest     # one of the stages listed above
-  tags:
-     - springboot_tag   # change to your runner's tag
-  script:
-     - cd Backend       # change 'Backend' to to where you have the pom.xml (do not add / in the beginning)
-     - mvn test         # maven test
-  only:
-    refs:
-      - main            # only to trigger the pipeline when changes are pushed to 'main'
-    changes:
-      - Backend/**/*    # more specifically - only when changes are made inside the 'Backend' folder
-
-auto-deploy:
-  stage: mavendeploy    # one of the stages listed above
-  tags:
-  - springboot_tag      # change to your runner's tag
-  script:               # script to run the deployment service you created
-    - cd Backend        # change 'Backend' to to where you have the pom.xml (do not add / in the beginning)
-    - sudo mv target/*.jar /target/web-demo.jar 
-    - sudo systemctl stop system-web-demo
-    - sudo systemctl start system-web-demo
-  only:
-    refs:
-      - main            # only to trigger the pipeline when changes are pushed to 'main'
-    changes:
-      - Backend/**/*    # more specifically - only when changes are made inside the 'Backend' folder
-
-android-build:
-  image: afirefly/android-ci:java17 # Docker image that has Android environments installed     gjandres/android-ci:latest
-  stage: androidbuild               # one of the stages listed above
-  tags:
-   - android_tag                    # change to your runner's tag
-  before_script:                    # enable gradlew, change 'Frontend' to where you have 'gradlew'
-    - export GRADLE_USER_HOME=`pwd`/.gradle
-    - chmod +x ./Frontend/gradlew
-  script:
-    - cd Frontend                   # change 'Frontend' to where you have 'gradlew' (do not add / in the beginning)
-    - ./gradlew build               # gradle build
-  only:
-    refs:
-      - main                        # only to trigger the pipeline when changes are pushed to 'main'
-    changes:
-      - Frontend/**/*               # more specifically - only when changes are made inside the 'Frontend' folder
-
-android-test:
-  image: afirefly/android-ci:java17
-  stage: androidtest               # one of the stages listed above
-  tags:
-    - android_tag                   # change to your runner's tag
-  before_script:                   # enable gradlew, change 'Frontend' to where you have 'gradlew'
-     - export GRADLE_USER_HOME=`pwd`/.gradle
-     - chmod +x ./Frontend/gradlew
-  script:
-     - cd Frontend                  # change 'Frontend' to where you have 'gradlew' (do not add / in the beginning)
-     - ./gradlew test               # gradle test
-  only:
-    refs:
-      - main          # only to trigger the pipeline when changes are pushed to 'main'
-    changes:
-      - Frontend/**/*               # more specifically - only when changes are made inside the 'Frontend' folder
-```
-
-##### Step 3:
-
-- On your team's repository, navigate to `Build -> Pipelines`, check to see if the jobs are running, click on each circle in the pipeline to view detailed status of each job.
-- If you see green check marks for all stages, this means all stages successfully ran through (Android ones may take a while)
-- Once all stages ran through successfully, check whether your Springboot application is deployed on your server by sending requests to it (e.g., from Postman).
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18 (Create React App) |
+| State management | Redux, Redux Thunk |
+| UI components | Chakra UI, Emotion, Framer Motion |
+| Routing | React Router v6 |
+| HTTP client | Axios |
+| Authentication | Firebase Authentication (Phone / OTP) |
+| Data layer | json-server (mock REST API over `db.json`) |
+
+Note that Firebase is used **only** for authentication. All hotel, flight, cart, and user records are served by `json-server` from the `db.json` file at the project root. There is no production database.
 
 ---
-# Setups by Each Team Member:
 
-### 1. Create a Gitlab runner of your own
+## Prerequisites
 
-##### Step 0: Registration Token
-In your team's repository GitLab webpage, navigate to `Settings -> CI/CD -> Runners -> Expand`
-~~Click on the `3 dots` next to the button `New Project Runner`~~
-~~Copy the `registration token`~~ 
-##### **This has been deprecated follow along as the instruction above in Step 1 and 2 of ``4. Register GitLab Runner``**
+- **Node.js 22 LTS.** Newer versions are not recommended — `react-scripts` 5.0.1 predates them and is no longer maintained. Verify with `node -v`.
+- **Git**
+- A **Google account** for creating a Firebase project
 
-##### Step 1: ssh into your server
+---
 
-From your computer, type
+## Installation
+
+### 1. Clone and install
+
 ```bash
-ssh <netid>@coms-3090-<xyz>.class.las.iastate.edu
+git clone https://github.com/LukeSulentic/Expedia-clone.git
+cd Expedia-clone
+npm install --legacy-peer-deps
 ```
 
-for example ```> ssh smitra@coms-309-001.class.las.iastate.edu```
+The `--legacy-peer-deps` flag is required. The project declares both `firebase` and a separate `@firebase/auth` package, which npm's default peer-dependency resolution rejects.
 
-##### Step 2: Create runner of your own
+Deprecation warnings and a vulnerability count during install are expected for a project of this age. **Do not run `npm audit fix --force`** — it upgrades `react-scripts` and breaks the build.
+
+### 2. Configure Firebase
+
+1. Create a project at the [Firebase Console](https://console.firebase.google.com/). Google Analytics can be disabled.
+2. Register a web app (the `</>` icon) and copy the generated `firebaseConfig` object.
+3. Paste those values into `src/01_firebase/config_firebase.js`, replacing the existing configuration.
+4. Go to **Authentication → Sign-in method**, enable the **Phone** provider, and save.
+5. On the same screen, expand **Phone numbers for testing** and add a test number — for example `+91 9999999999` with code `123456`. This allows sign-in without sending a real SMS.
+6. **Go to Authentication → Settings → SMS region policy and allow India (+91).** New Firebase projects restrict SMS by region to limit toll fraud. Without this, every authentication request fails with a 400 response (`OPERATION_NOT_ALLOWED: SMS unable to be sent until this region enabled by the app developer`), and the UI gives no indication of why — the sign-in button simply remains on "Please wait…" indefinitely.
+
+The `+91` country code is hardcoded in `src/Pages/Login.jsx` and `src/Pages/Register.jsx`, which is why the region policy must permit India rather than your own country.
+
+### 3. Run the application
+
+The application requires **two processes running simultaneously**, so use two terminals.
+
+Terminal 1 — mock API on port 8080:
+
 ```bash
-sudo /usr/local/bin/gitlab-runner register
+npm run server
 ```
 
-- You will be prompted to add a gitlab-ci instance url, enter `https://git.las.iastate.edu/`
+Terminal 2 — development server on port 3000:
 
-- Next you will be prompted to enter the registration token you saved from `Step 0`
-
-- Next enter any description
-
-- Next enter tags, tags are important, as they will be used later to Tie a JOB to a RUNNER, name them appropriately, so it will be easier for you to identify, example:
-  -  tag for your own runner: `yourname_tag`
-
-- Finally, you will be asked to select executor, enter 
-  - `shell` if this runner will be used for Springboot
-  - `docker` if this runner will be used for Android
-  
-- Default Docker image enter `alpine:latest` (if this runner will be used for Android)
-    
-- Your runner should now be up and running. You can verify this by again navigating to `Settings -> CI/CD -> Runners -> Expand`, you should see an active runner created (green for active), with the specified tags.
-- Sometimes the gitlab runners are not started. You can try   `$ sudo /usr/local/bin/gitlab-runner run`
-
-### 2. Create a branch with the branch name \<YOURNAME\>_CICD
-
-- Example command if you are creating the branch from the cloned repositoy (local):
 ```bash
-git branch YOURNAME_CICD
+npm start
 ```
 
-- Checkout the branch:
+Then open <http://localhost:3000>. Confirm the API is live by visiting <http://localhost:8080/hotel>, which should return JSON.
+
+### 4. Create an account
+
+Login requires a matching user record in `db.json`, which is checked *before* Firebase is contacted. New users must therefore **register first** at `/register`; attempting to log in with an unknown number redirects to the registration page.
+
+Register with `9999999999` (ten digits, no country code) and enter `123456` as the OTP.
+
+### 5. Production build
+
 ```bash
-git checkout YOURNAME_CICD
+npm run build
 ```
 
-### 3. Add/Modify .gitlab-ci.yml in your own branch
+Note that a deployed build will not function without a hosted replacement for `json-server`; see [Deployment](#deployment).
 
-**Example if you are working on the backend**
-```yaml
-stages:
-  - mavenbuild
-  - maventest
-  
-maven-build:            
-  stage: mavenbuild
-  tags:
-    - yourname_tag      # <-- change to your runner's tag
-  script:
-    - cd Backend        # change 'Backend' to to where you have the pom.xml (do not add / in the beginning)
-    - mvn package
-  only:
-    refs:
-      - YOURNAME_CICD
-    changes:
-      - Backend/**/*
+---
 
+## Features and Current Status
 
-maven-test:             
-  stage: maventest
-  tags:
-    - yourname_tag     # <-- change to your runner's tag
-  script:
-    - cd Backend       # change 'Backend' to to where you have the pom.xml (do not add / in the beginning)
-    - mvn test
-  only:
-    refs:
-      - YOURNAME_CICD
-    changes:
-      - Backend/**/*
-```
+| Feature | Status |
+|---|---|
+| Landing page | Working |
+| Registration and login (Firebase OTP) | Working, after the configuration above |
+| Flight search, sorting, filtering | Working for the routes seeded in `db.json` |
+| Hotel search, sorting, filtering | Working for the localities seeded in `db.json` |
+| Cart | Working |
+| Booking | Working |
+| Things to do | Working |
+| Admin panel | Working, but see Known Issues |
+| Cars | **Non-functional** — no `cars` resource exists in `db.json` |
+| Holiday packages | **Non-functional** — no corresponding resource exists |
+| Trains | **Non-functional** — no corresponding resource exists |
 
+### Data that produces results
 
-**Example if you are working on the frontend**
-```yaml
-stages:
-  - androidbuild
-  - androidtest 
-  
-android-build:
-  image: afirefly/android-ci:java17
-  stage: androidbuild
-  tags:
-   - yourname_tag                   # <-- change to your runner's tag
-  before_script:                    # change 'Frontend' to where you have 'gradlew'
-    - export GRADLE_USER_HOME=`pwd`/.gradle
-    - chmod +x ./Frontend/gradlew
-  script:
-    - cd Frontend                   # change 'Frontend' to where you have 'gradlew' (do not add / in the beginning)
-    - ./gradlew build
-  only:
-    refs:
-      - YOURNAME_CICD
-    changes:
-      - Frontend/**/*
+The dataset is small, so most searches return nothing. These values are known to work:
 
-android-test:
-  image: afirefly/android-ci:java17
-  stage: androidtest
-  tags:
-    - yourname_tag                  # <-- change to your runner's tag
-  before_script:                   # change 'Frontend' to where you have 'gradlew'
-    - export GRADLE_USER_HOME=`pwd`/.gradle
-    - chmod +x ./Frontend/gradlew
-  script:
-    - cd Frontend                  # change 'Frontend' to where you have 'gradlew' (do not add / in the beginning)
-    - ./gradlew test
-  only:
-    refs:
-      - YOURNAME_CICD
-    changes:
-      - Frontend/**/*
-```
+- **Flights:** `DELHI` → `MUMBAI`, `DELHI` → `BANGLURU`, `DELHI` → `PUNE`, `MUMBAI` → `BANGLURU`. No other routes exist. Note the non-standard spelling of `BANGLURU`.
+- **Hotels:** the `place` field stores a *locality*, not a city — for example `Paharganj`, `Mahipalpur`, `Calangute`, `Candolim`, `Koramangala`. The dataset covers Bangalore, Delhi, and Goa.
+- **Things to do:** `kolkata`, `delhi`, `rajasthan`.
 
-### 5. Push to your branch
-- Push some updates to your own branch
-- On your team's repository, navigate to `Build -> Pipelines`, check to see if the jobs are running, click on each circle in the pipeline to view detailed status of each job.
-- If you see green check marks for all stages (2 for your own branch), this means all stages successfully ran through (Android ones may take a while)
-- NEVER MERGE THIS BRANCH BACK TO THE MAIN BRANCH!!
+### Admin panel
+
+Reachable at `/admin`, with sub-routes at `/admin/adminflight`, `/admin/adminstay`, `/admin/products`, and `/admin/hotels`. A link is also present on the login page.
+
+---
+
+## Known Issues
+
+These were identified during our assessment of the codebase and are documented rather than fixed.
+
+**Security**
+
+- Admin routes have no access control. Any unauthenticated visitor who navigates to `/admin` gains full access to bookings, listings, and user records.
+- The `/users` endpoint exposes all user records, including passwords, without authentication.
+- Passwords are stored in plaintext in `db.json`. The values in this repository have been replaced with placeholders; the upstream repository still contains what appear to be the original developers' real credentials.
+
+**Reliability**
+
+- `signInWithPhoneNumber` has an empty `.catch` block in both `Login.jsx` and `Register.jsx`. Authentication failures are silently discarded, leaving the button stuck on "Please wait…" with no error shown. Diagnosing any auth problem requires reading the network response in browser developer tools.
+- The redirect after a failed login uses `setInterval` rather than `setTimeout`, so it fires repeatedly instead of once.
+
+**Portability and data quality**
+
+- The `+91` country code is hardcoded, so the application only accepts Indian phone numbers.
+- The API base URL `http://localhost:8080` is hardcoded in 13 locations under `src/`, which blocks deployment without modification.
+- Components manipulate the DOM directly via `document.querySelector` rather than through React state.
+- Flight records are inconsistently cased (`dELHI` appears alongside `DELHI`), which breaks case-sensitive comparison.
+- Hotel records contain leftover CSS class names as JSON keys (`pc__html 5`, `font16`, `latoBold 14`), and many images point at placeholder assets.
+- The seed data was scraped from **MakeMyTrip**, not Expedia — all image URLs resolve to `mmtcdn.com` and all prices are in Indian rupees.
+
+---
+
+## Deployment
+
+**Local deployment** is described under [Installation](#installation) and is the supported path.
+
+Cloud deployment requires additional work beyond hosting the frontend. Because `json-server` runs locally and its address is hardcoded in 13 files, a deployed build will render but every search, booking, and admin view will fail. Deploying to a platform such as Vercel therefore also requires one of:
+
+1. Hosting `json-server` separately and replacing the hardcoded URLs with an environment variable, or
+2. Migrating `db.json` into Firebase Realtime Database and rewriting the Axios calls.
+
+Any deployed domain must also be added under **Firebase → Authentication → Settings → Authorized domains**, or OTP will fail in production.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## Credits
+
+Original application by Kumkum Dutta (team lead), Ashish, Amit, Sagar Balsaraf, and Sarim: <https://github.com/kumkumdutta/Expedia-clone>.
+
+Maintained for SE 3290 by Luke Sulentic, Tyler Moss, and Kasson Plummer.
